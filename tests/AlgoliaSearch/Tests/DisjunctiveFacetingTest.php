@@ -131,7 +131,7 @@ class DisjunctiveFacetingTest extends AlgoliaSearchTestCase
     }
 
     /**
-     * @expectedException \AlgoliaSearch\AlgoliaException
+     * @expectedException \InvalidArgumentException
      */
     public function testSearchDisjunctiveWithFilter()
     {

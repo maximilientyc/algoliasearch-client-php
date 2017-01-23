@@ -408,64 +408,50 @@ class Index
         return $deletedCount;
     }
 
+    private function getAlgoliaFiltersArrayWithoutCurrentRefinement($filters, $needle)
+    {
+        // iterate on each filters which can be string or array and filter out every refinement matching the needle
+        for ($i = 0; $i < count($filters); $i++) {
+            if (is_array($filters[$i])) {
+                foreach ($filters[$i] as $filter) {
+                    if (mb_substr($filter, 0, mb_strlen($needle)) === $needle) {
+                        unset($filters[$i]);
+                        $filters = array_values($filters);
+                        $i--;
+                        break;
+                    }
+                }
+            } else {
+                if (mb_substr($filters[$i], 0, mb_strlen($needle)) === $needle) {
+                    unset($filters[$i]);
+                    $filters = array_values($filters);
+                    $i--;
+                }
+            }
+        }
+
+        return $filters;
+    }
+
     /**
      * @param $queryParams
      * @return array
      */
     private function getDisjunctiveQueries($queryParams)
     {
-        $queriesParams = array();
-        $disjunctiveFacets = $queryParams['disjunctiveFacets']; // We now that there is at least one
+        assert(
+            isset($queryParams['disjunctiveFacets'])
+            && is_array($queryParams['disjunctiveFacets'])
+            && count($queryParams['disjunctiveFacets']) > 0
+        );
 
-        foreach ($disjunctiveFacets as $facetName) {
+        $queriesParams = array();
+
+        foreach ($queryParams['disjunctiveFacets'] as $facetName) {
             $params = $queryParams;
             $params['facets'] = array($facetName);
             $facetFilters = isset($params['facetFilters']) ? $params['facetFilters']: array();
             $numericFilters = isset($params['numericFilters']) ? $params['numericFilters']: array();
-
-            // iterate on facet filters and remove the filter of the current disjunctive facet
-            for ($i = 0; $i < count($facetFilters); $i++) {
-                $needle = $facetName . ':';
-
-                if (is_array($facetFilters[$i])) {
-                    foreach ($facetFilters[$i] as $filter) {
-                        if (substr($filter, 0, strlen($needle)) === $needle) {
-                            unset($facetFilters[$i]);
-                            $facetFilters = array_values($facetFilters);
-                            $i--;
-                            break;
-                        }
-                    }
-                } else {
-                    if (substr($facetFilters[$i], 0, strlen($needle)) === $needle) {
-                        unset($facetFilters[$i]);
-                        $facetFilters = array_values($facetFilters);
-                        $i--;
-                    }
-                }
-            }
-
-            // iterate on facet numericFilters and remove the filter of the current disjunctive facet
-            for ($i = 0; $i < count($numericFilters); $i++) {
-                $needle = $facetName;
-
-                if (is_array($numericFilters[$i])) {
-                    foreach ($numericFilters[$i] as $filter) {
-                        if (substr($filter, 0, strlen($needle)) === $needle) {
-                            unset($numericFilters[$i]);
-                            $numericFilters = array_values($numericFilters);
-                            $i--;
-                            break;
-                        }
-                    }
-                } else {
-                    if (substr($numericFilters[$i], 0, strlen($needle)) === $needle) {
-                        unset($numericFilters[$i]);
-                        $numericFilters = array_values($numericFilters);
-                        $i--;
-                    }
-                }
-            }
 
             $additionalParams = array(
                 'hitsPerPage' => 1,
@@ -475,9 +461,8 @@ class Index
                 'attributesToSnippet' => array()
             );
 
-
-            $additionalParams['facetFilters'] = $facetFilters;
-            $additionalParams['numericFilters'] = $numericFilters;
+            $additionalParams['facetFilters'] = $this->getAlgoliaFiltersArrayWithoutCurrentRefinement($facetFilters, $facetName . ':');
+            $additionalParams['numericFilters'] = $this->getAlgoliaFiltersArrayWithoutCurrentRefinement($numericFilters, $facetName);
 
             $queriesParams[$facetName] = array_merge($params, $additionalParams);
         }
@@ -494,11 +479,11 @@ class Index
     private function searchWithDisjunctiveFaceting($query, $args)
     {
         if (isset($args['filters'])) {
-            throw new AlgoliaException('You can not use disjunctive faceting and the filters parameter');
+            throw new \InvalidArgumentException('You can not use disjunctive faceting and the filters parameter');
         }
 
         if (false === is_array($args['disjunctiveFacets'])) {
-            throw new AlgoliaException('disjunctiveFacets parameter needs to be an array');
+            throw new \InvalidArgumentException('disjunctiveFacets parameter needs to be an array');
         }
 
         /**
